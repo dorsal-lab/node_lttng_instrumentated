@@ -230,10 +230,13 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
   while (!QUEUE_EMPTY(&loop->watcher_queue)) {
     q = QUEUE_HEAD(&loop->watcher_queue);
+    
     QUEUE_REMOVE(q);
     QUEUE_INIT(q);
 
     w = QUEUE_DATA(q, uv__io_t, watcher_queue);
+    // trace
+    tracepoint(uv_provider, uv_watcherq_remove_event, w->fd, loop->backend_fd, loop->backend_fd);
     assert(w->pevents != 0);
     assert(w->fd >= 0);
     assert(w->fd < (int) loop->nwatchers);
@@ -311,20 +314,24 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         abort();
 
     if (no_epoll_wait != 0 || (sigmask != 0 && no_epoll_pwait == 0)) {
+      tracepoint(uv_provider, uv_io_poll_event, w->pevents,w->fd, w->events,loop->backend_fd, op, nfds,pe->data.fd, &pe->data.ptr, loop->backend_fd);
       nfds = epoll_pwait(loop->backend_fd,
                          events,
                          ARRAY_SIZE(events),
                          timeout,
                          &sigset);
+      tracepoint(uv_provider, uv_exit_io_poll_event, w->pevents,w->fd, w->events,loop->backend_fd, op, nfds,pe->data.fd, &pe->data.ptr, loop->backend_fd); 
       if (nfds == -1 && errno == ENOSYS) {
         uv__store_relaxed(&no_epoll_pwait_cached, 1);
         no_epoll_pwait = 1;
       }
     } else {
+     tracepoint(uv_provider, uv_out_iopoll_event, 0, 0, 0);
       nfds = epoll_wait(loop->backend_fd,
                         events,
                         ARRAY_SIZE(events),
                         timeout);
+     tracepoint(uv_provider, uv_exit_out_iopoll_event, 0, 0, 0);                 
       if (nfds == -1 && errno == ENOSYS) {
         uv__store_relaxed(&no_epoll_wait_cached, 1);
         no_epoll_wait = 1;
@@ -459,7 +466,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           have_signals = 1;
         } else {
           uv__metrics_update_idle_time(loop);
+          
           w->cb(loop, w, pe->events);
+           
+          //tracepoint(uv_provider, uv_exit_io_poll_event, w->pevents,w->fd, w->events,loop->backend_fd, op, nfds,pe->data.fd, &pe->data.ptr, loop->backend_fd);
+
         }
 
         nevents++;

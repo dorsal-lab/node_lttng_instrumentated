@@ -21,7 +21,7 @@
 #include "uv.h"
 #include "uv-common.h"
 #include "heap-inl.h"
-
+#include "unix/uv-tp.h"
 #include <assert.h>
 #include <limits.h>
 
@@ -102,7 +102,9 @@ int uv_timer_stop(uv_timer_t* handle) {
               (struct heap_node*) &handle->heap_node,
               timer_less_than);
   uv__handle_stop(handle);
-
+  
+  tracepoint(uv_provider, uv_timersq_remove_event, handle->u.fd, handle->start_id,0);
+  
   return 0;
 }
 
@@ -162,6 +164,8 @@ int uv__next_timeout(const uv_loop_t* loop) {
 void uv__run_timers(uv_loop_t* loop) {
   struct heap_node* heap_node;
   uv_timer_t* handle;
+  
+  tracepoint(uv_provider, uv_timerPhase_event, index);
 
   for (;;) {
     heap_node = heap_min(timer_heap(loop));
@@ -174,8 +178,10 @@ void uv__run_timers(uv_loop_t* loop) {
 
     uv_timer_stop(handle);
     uv_timer_again(handle);
+    tracepoint(uv_provider, uv_run_timers_event, handle->u.fd, &handle->timer_cb, handle->timer_id);
     handle->timer_cb(handle);
   }
+  tracepoint(uv_provider, uv_exit_timerphase_event, index);
 }
 
 

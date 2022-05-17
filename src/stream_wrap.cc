@@ -30,7 +30,7 @@
 #include "tcp_wrap.h"
 #include "udp_wrap.h"
 #include "util-inl.h"
-
+#include "../deps/uv/src/unix/uv-tp.h"
 #include <cstring>  // memcpy()
 #include <climits>  // INT_MAX
 
@@ -198,8 +198,12 @@ int LibuvStreamWrap::ReadStart() {
   return uv_read_start(stream(), [](uv_handle_t* handle,
                                     size_t suggested_size,
                                     uv_buf_t* buf) {
+    
     static_cast<LibuvStreamWrap*>(handle->data)->OnUvAlloc(suggested_size, buf);
   }, [](uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
+    stream->id = random();
+    
+    
     static_cast<LibuvStreamWrap*>(stream->data)->OnUvRead(nread, buf);
   });
 }
@@ -255,6 +259,7 @@ void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
   // We should not be getting this callback if someone has already called
   // uv_close() on the handle.
   CHECK_EQ(persistent().IsEmpty(), false);
+  
 
   if (nread > 0) {
     MaybeLocal<Object> pending_obj;
@@ -277,8 +282,11 @@ void LibuvStreamWrap::OnUvRead(ssize_t nread, const uv_buf_t* buf) {
           .Check();
     }
   }
-
+  
   EmitRead(nread, *buf);
+  
+  
+
 }
 
 
@@ -381,6 +389,7 @@ int LibuvStreamWrap::DoWrite(WriteWrap* req_wrap,
                              uv_buf_t* bufs,
                              size_t count,
                              uv_stream_t* send_handle) {
+  
   LibuvWriteWrap* w = static_cast<LibuvWriteWrap*>(req_wrap);
   return w->Dispatch(uv_write2,
                      stream(),
@@ -399,6 +408,8 @@ void LibuvStreamWrap::AfterUvWrite(uv_write_t* req, int status) {
   HandleScope scope(req_wrap->env()->isolate());
   Context::Scope context_scope(req_wrap->env()->context());
   req_wrap->Done(status);
+  tracepoint(uv_provider, uv_exit_write_stream,req->id, 0, 0);
+
 }
 
 }  // namespace node

@@ -11,6 +11,7 @@
 #include "src/objects/promise.h"
 #include "src/objects/smi-inl.h"
 
+
 namespace v8 {
 namespace internal {
 
@@ -119,7 +120,7 @@ void MicrotaskQueueBuiltinsAssembler::PrepareForContext(
 void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     TNode<Context> current_context, TNode<Microtask> microtask) {
   CSA_ASSERT(this, TaggedIsNotSmi(microtask));
-
+ 
   StoreRoot(RootIndex::kCurrentMicrotask, microtask);
   TNode<IntPtrT> saved_entered_context_count = GetEnteredContextCount();
   TNode<Map> microtask_map = LoadMap(microtask);
@@ -480,6 +481,7 @@ TF_BUILTIN(EnqueueMicrotask, MicrotaskQueueBuiltinsAssembler) {
     StoreNoWriteBarrier(MachineType::PointerRepresentation(), microtask_queue,
                         IntPtrConstant(MicrotaskQueue::kSizeOffset),
                         IntPtrAdd(size, IntPtrConstant(1)));
+                        
     Return(UndefinedConstant());
   }
 
@@ -487,6 +489,8 @@ TF_BUILTIN(EnqueueMicrotask, MicrotaskQueueBuiltinsAssembler) {
   // implementation to grow the buffer.
   BIND(&if_grow);
   {
+   
+     //tracepoint(uv_provider, uv_async_file_event,100, "exit", 0);
     TNode<ExternalReference> isolate_constant =
         ExternalConstant(ExternalReference::isolate_address(isolate()));
     TNode<ExternalReference> function =
@@ -538,6 +542,8 @@ TF_BUILTIN(RunMicrotasks, MicrotaskQueueBuiltinsAssembler) {
   SetMicrotaskQueueStart(microtask_queue, new_start);
 
   RunSingleMicrotask(current_context, microtask);
+  
+  
   IncrementFinishedMicrotaskCount(microtask_queue);
   Goto(&loop);
 

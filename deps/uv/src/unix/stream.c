@@ -1398,6 +1398,11 @@ int uv_write2(uv_write_t* req,
               uv_write_cb cb) {
   int empty_queue;
 
+  stream->id = rand();
+  req->id=stream->id;
+
+
+  tracepoint(uv_provider, uv_write_stream,stream->id, nbufs, req->id);
   assert(nbufs > 0);
   assert((stream->type == UV_TCP ||
           stream->type == UV_NAMED_PIPE ||
@@ -1555,6 +1560,8 @@ int uv_try_write(uv_stream_t* stream,
 int uv_read_start(uv_stream_t* stream,
                   uv_alloc_cb alloc_cb,
                   uv_read_cb read_cb) {
+  //stream->id = random();
+  tracepoint(uv_provider, uv_read_stream,stream->id, 0);
   assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE ||
       stream->type == UV_TTY);
 
@@ -1588,8 +1595,11 @@ int uv_read_start(uv_stream_t* stream,
 
 
 int uv_read_stop(uv_stream_t* stream) {
-  if (!(stream->flags & UV_HANDLE_READING))
+  
+  if (!(stream->flags & UV_HANDLE_READING)) {
+    tracepoint(uv_provider, uv_exit_read_stream,stream->id, 0);
     return 0;
+  }
 
   stream->flags &= ~UV_HANDLE_READING;
   uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
@@ -1599,6 +1609,7 @@ int uv_read_stop(uv_stream_t* stream) {
 
   stream->read_cb = NULL;
   stream->alloc_cb = NULL;
+  tracepoint(uv_provider, uv_exit_read_stream,stream->id, 0);
   return 0;
 }
 

@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 #include <algorithm>
-
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#include "../../../uv/src/unix/uv-tp.h"
 #include "src/api/api-inl.h"
 #include "src/base/logging.h"
 #include "src/execution/isolate.h"
@@ -15,6 +17,7 @@
 #include "src/objects/visitors.h"
 #include "src/roots/roots-inl.h"
 #include "src/tracing/trace-event.h"
+
 
 namespace v8 {
 namespace internal {
@@ -84,6 +87,7 @@ void MicrotaskQueue::EnqueueMicrotask(v8::Isolate* v8_isolate,
   Handle<CallableTask> microtask = isolate->factory()->NewCallableTask(
       Utils::OpenHandle(*function), isolate->native_context());
   EnqueueMicrotask(*microtask);
+  tracepoint(uv_provider, uv_enqueue_microtask,1);
 }
 
 void MicrotaskQueue::EnqueueMicrotask(v8::Isolate* v8_isolate,
@@ -94,6 +98,7 @@ void MicrotaskQueue::EnqueueMicrotask(v8::Isolate* v8_isolate,
   Handle<CallbackTask> microtask = isolate->factory()->NewCallbackTask(
       isolate->factory()->NewForeign(reinterpret_cast<Address>(callback)),
       isolate->factory()->NewForeign(reinterpret_cast<Address>(data)));
+      tracepoint(uv_provider, uv_enqueue_microtask,1);
   EnqueueMicrotask(*microtask);
 }
 
@@ -183,6 +188,7 @@ int MicrotaskQueue::RunMicrotasks(Isolate* isolate) {
   }
   DCHECK_EQ(0, size());
   OnCompleted(isolate);
+  tracepoint(uv_provider, uv_dequeue_microtask,processed_microtask_count);
 
   return processed_microtask_count;
 }

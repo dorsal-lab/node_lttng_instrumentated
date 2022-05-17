@@ -399,6 +399,8 @@ UV_EXTERN char* uv_err_name_r(int err, char* buf, size_t buflen);
   void* data;                                                                 \
   /* read-only */                                                             \
   uv_req_type type;                                                           \
+   /* public */                                                               \
+  int req_context;                                                            \
   /* private */                                                               \
   void* reserved[6];                                                          \
   UV_REQ_PRIVATE_FIELDS                                                       \
@@ -431,8 +433,11 @@ struct uv_shutdown_s {
   /* read-only */                                                             \
   uv_loop_t* loop;                                                            \
   uv_handle_type type;                                                        \
+  char *method;       \
+  int timer_id;   \
   /* private */                                                               \
   uv_close_cb close_cb;                                                       \
+  int h_context;                                                              \
   void* handle_queue[2];                                                      \
   union {                                                                     \
     int fd;                                                                   \
@@ -479,6 +484,7 @@ UV_EXTERN uv_buf_t uv_buf_init(char* base, unsigned int len);
 #define UV_STREAM_FIELDS                                                      \
   /* number of bytes queued for writing */                                    \
   size_t write_queue_size;                                                    \
+  int id;                                                                     \
   uv_alloc_cb alloc_cb;                                                       \
   uv_read_cb read_cb;                                                         \
   /* private */                                                               \
@@ -525,6 +531,7 @@ UV_EXTERN int uv_try_write(uv_stream_t* handle,
 struct uv_write_s {
   UV_REQ_FIELDS
   uv_write_cb cb;
+  int id;
   uv_stream_t* send_handle; /* TODO: make private and unix-only in v2.x. */
   uv_stream_t* handle;
   UV_WRITE_PRIVATE_FIELDS
@@ -1066,6 +1073,7 @@ UV_EXTERN uv_pid_t uv_process_get_pid(const uv_process_t*);
 struct uv_work_s {
   UV_REQ_FIELDS
   uv_loop_t* loop;
+  int id;
   uv_work_cb work_cb;
   uv_after_work_cb after_work_cb;
   UV_WORK_PRIVATE_FIELDS
@@ -1109,6 +1117,7 @@ struct uv_interface_address_s {
 
 struct uv_passwd_s {
   char* username;
+  char *method;
   long uid;
   long gid;
   char* shell;
@@ -1127,6 +1136,7 @@ struct uv_utsname_s {
 
 struct uv_statfs_s {
   uint64_t f_type;
+  char *method;
   uint64_t f_bsize;
   uint64_t f_blocks;
   uint64_t f_bfree;
@@ -1299,17 +1309,21 @@ struct uv_dir_s {
   uv_dirent_t* dirents;
   size_t nentries;
   void* reserved[4];
+  char *method;
   UV_DIR_PRIVATE_FIELDS
 };
 
 /* uv_fs_t is a subclass of uv_req_t. */
 struct uv_fs_s {
+  
   UV_REQ_FIELDS
   uv_fs_type fs_type;
   uv_loop_t* loop;
   uv_fs_cb cb;
   ssize_t result;
   void* ptr;
+  int id;
+  char *method;
   const char* path;
   uv_stat_t statbuf;  /* Stores the result of uv_fs_stat() and uv_fs_fstat(). */
   UV_FS_PRIVATE_FIELDS
@@ -1547,6 +1561,7 @@ struct uv_fs_event_s {
   UV_HANDLE_FIELDS
   /* private */
   char* path;
+  
   UV_FS_EVENT_PRIVATE_FIELDS
 };
 
@@ -1558,6 +1573,7 @@ struct uv_fs_poll_s {
   UV_HANDLE_FIELDS
   /* Private, don't touch. */
   void* poll_ctx;
+  
 };
 
 UV_EXTERN int uv_fs_poll_init(uv_loop_t* loop, uv_fs_poll_t* handle);

@@ -17,9 +17,9 @@ ACLOCAL_AMFLAGS = -I m4
 AM_CPPFLAGS = -I$(top_srcdir)/include \
               -I$(top_srcdir)/src
 
-include_HEADERS=include/uv.h
+include_HEADERS=include/uv.h 
 
-uvincludedir = $(includedir)/uv
+uvincludedir = $(includedir)/uv 
 uvinclude_HEADERS = include/uv/errno.h \
                     include/uv/threadpool.h \
                     include/uv/version.h
@@ -28,7 +28,7 @@ CLEANFILES =
 
 lib_LTLIBRARIES = libuv.la
 libuv_la_CFLAGS = @CFLAGS@
-libuv_la_LDFLAGS = -no-undefined -version-info 1:0:0
+libuv_la_LDFLAGS = -no-undefined -version-info 1:0:0 
 libuv_la_SOURCES = src/fs-poll.c \
                    src/heap-inl.h \
                    src/idna.c \

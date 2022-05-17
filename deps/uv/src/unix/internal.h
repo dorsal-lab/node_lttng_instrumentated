@@ -36,7 +36,7 @@
 #if defined(__STRICT_ANSI__)
 # define inline __inline
 #endif
-
+#include "uv-tp.h"
 #if defined(__linux__)
 # include "linux-syscalls.h"
 #endif /* __linux__ */
@@ -301,7 +301,9 @@ void uv__fsevents_loop_delete(uv_loop_t* loop);
 UV_UNUSED(static void uv__update_time(uv_loop_t* loop)) {
   /* Use a fast time source if available.  We only need millisecond precision.
    */
+  tracepoint(uv_provider, uv_updatetime_event, 0, loop->backend_fd);
   loop->time = uv__hrtime(UV_CLOCK_FAST) / 1000000;
+  tracepoint(uv_provider, uv_exit_update_time_event, 0, loop->backend_fd);
 }
 
 UV_UNUSED(static char* uv__basename_r(const char* path)) {

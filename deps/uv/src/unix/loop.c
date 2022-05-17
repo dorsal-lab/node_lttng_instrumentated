@@ -153,6 +153,7 @@ int uv_loop_fork(uv_loop_t* loop) {
       continue;
 
     if (w->pevents != 0 && QUEUE_EMPTY(&w->watcher_queue)) {
+      tracepoint(uv_provider, uv_watcherq_insert_event, w->fd, loop->backend_fd, loop->backend_fd);
       w->events = 0; /* Force re-registration in uv__io_poll. */
       QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
     }

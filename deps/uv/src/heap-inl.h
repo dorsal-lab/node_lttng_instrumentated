@@ -23,7 +23,7 @@
 #else
 # define HEAP_EXPORT(declaration) static declaration
 #endif
-
+#include "unix/uv-tp.h"
 struct heap_node {
   struct heap_node* left;
   struct heap_node* right;
@@ -136,10 +136,15 @@ HEAP_EXPORT(void heap_insert(struct heap* heap,
   }
 
   /* Insert the new node. */
+  //trace
+  uv_timer_t* handle = container_of(newnode, uv_timer_t, heap_node);
+  int indx= random();
+  handle->timer_id=indx;
+  tracepoint(uv_provider, uv_timersq_insert_event, handle->u.fd, handle->timer_id, 0);
   newnode->parent = *parent;
   *child = newnode;
   heap->nelts += 1;
-
+  
   /* Walk up the tree and check at each node if the heap property holds.
    * It's a min heap so parent < child must be true.
    */
@@ -156,6 +161,7 @@ HEAP_EXPORT(void heap_remove(struct heap* heap,
   unsigned int path;
   unsigned int k;
   unsigned int n;
+  
 
   if (heap->nelts == 0)
     return;
@@ -234,9 +240,13 @@ HEAP_EXPORT(void heap_remove(struct heap* heap,
    */
   while (child->parent != NULL && less_than(child, child->parent))
     heap_node_swap(heap, child->parent, child);
+    uv_timer_t* handle = container_of(heap, uv_timer_t, heap_node);
+    
 }
 
 HEAP_EXPORT(void heap_dequeue(struct heap* heap, heap_compare_fn less_than)) {
+    
+
   heap_remove(heap, heap->min, less_than);
 }
 

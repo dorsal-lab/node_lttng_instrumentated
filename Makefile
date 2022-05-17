@@ -749,9 +749,8 @@ VERSIONS_DATA = out/previous-doc-versions.json
 gen-api = tools/doc/generate.js --node-version=$(FULLVERSION) \
 		--apilinks=$(LINK_DATA) $< --output-directory=out/doc/api \
 		--versions-file=$(VERSIONS_DATA)
-gen-apilink = tools/doc/apilinks.js $(LINK_DATA) $(wildcard lib/*.js)
-
-$(LINK_DATA): $(wildcard lib/*.js) tools/doc/apilinks.js | out/doc
+gen-apilink = tools/doc/apilinks.js $(LINK_DATA) $(wildcard lib/*.js) lib/build/Release/calculate.node
+$(LINK_DATA): $(wildcard lib/*.js) tools/doc/apilinks.js lib/build/Release/calculate.node | out/doc
 	$(call available-node, $(gen-apilink))
 
 # Regenerate previous versions data if the current version changes

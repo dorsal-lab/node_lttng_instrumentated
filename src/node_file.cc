@@ -39,6 +39,7 @@
 #include <cstring>
 #include <cerrno>
 #include <climits>
+#include "../deps/uv/src/unix/uv-tp.h"
 
 #if defined(__MINGW32__) || defined(_MSC_VER)
 # include <io.h>
@@ -345,6 +346,8 @@ MaybeLocal<Promise> FileHandle::ClosePromise() {
         close->Reject(UVException(isolate, req->result, "close"));
       } else {
         close->Resolve();
+        //tracepoint(uv_provider, uv_async_file_event,req->id, strcat(req->method, "_promiseResolve"), 0);
+
       }
     }};
     int ret = req->Dispatch(uv_fs_close, fd_, AfterClose);
@@ -388,6 +391,7 @@ void FileHandle::AfterClose() {
 void FileHandleReadWrap::MemoryInfo(MemoryTracker* tracker) const {
   tracker->TrackField("buffer", buffer_);
   tracker->TrackField("file_handle", this->file_handle_);
+  
 }
 
 FileHandleReadWrap::FileHandleReadWrap(FileHandle* handle, Local<Object> obj)
@@ -597,6 +601,9 @@ void FSReqAfterScope::Clear() {
 // which is also why the errors should have been constructed
 // in JS for more flexibility.
 void FSReqAfterScope::Reject(uv_fs_t* req) {
+  
+  tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
   BaseObjectPtr<FSReqBase> wrap { wrap_ };
   Local<Value> exception =
       UVException(wrap_->env()->isolate(),
@@ -606,6 +613,7 @@ void FSReqAfterScope::Reject(uv_fs_t* req) {
                   req->path,
                   wrap_->data());
   Clear();
+
   wrap->Reject(exception);
 }
 
@@ -621,8 +629,12 @@ void AfterNoArgs(uv_fs_t* req) {
   FSReqBase* req_wrap = FSReqBase::from_req(req);
   FSReqAfterScope after(req_wrap, req);
 
-  if (after.Proceed())
+  if (after.Proceed()) {
     req_wrap->Resolve(Undefined(req_wrap->env()->isolate()));
+    //tracepoint(uv_provider, uv_async_file_event,req->id, strcat(req->method, "_afterNoargs"), 0);
+    tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+    }
+
 }
 
 void AfterStat(uv_fs_t* req) {
@@ -631,6 +643,9 @@ void AfterStat(uv_fs_t* req) {
 
   if (after.Proceed()) {
     req_wrap->ResolveStat(&req->statbuf);
+        //tracepoint(uv_provider, uv_async_file_event,req->id, strcat(req->method, "_afterStat"), 0);
+    tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
   }
 }
 
@@ -643,6 +658,7 @@ void AfterInteger(uv_fs_t* req) {
 
   if (after.Proceed())
     req_wrap->Resolve(Integer::New(req_wrap->env()->isolate(), req->result));
+    tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
 }
 
 void AfterOpenFileHandle(uv_fs_t* req) {
@@ -653,6 +669,8 @@ void AfterOpenFileHandle(uv_fs_t* req) {
     FileHandle* fd = FileHandle::New(req_wrap->env(), req->result);
     if (fd == nullptr) return;
     req_wrap->Resolve(fd->object());
+    tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
   }
 }
 
@@ -685,10 +703,15 @@ void AfterMkdirp(uv_fs_t* req) {
                                  &error);
       if (path.IsEmpty())
         req_wrap->Reject(error);
-      else
+      else {
         req_wrap->Resolve(path.ToLocalChecked());
+        tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+      }
+
     } else {
       req_wrap->Resolve(Undefined(req_wrap->env()->isolate()));
+      tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
     }
   }
 }
@@ -707,8 +730,11 @@ void AfterStringPath(uv_fs_t* req) {
                                &error);
     if (link.IsEmpty())
       req_wrap->Reject(error);
-    else
+    else {
       req_wrap->Resolve(link.ToLocalChecked());
+     tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
+    }
   }
 }
 
@@ -726,8 +752,11 @@ void AfterStringPtr(uv_fs_t* req) {
                                &error);
     if (link.IsEmpty())
       req_wrap->Reject(error);
-    else
+    else {
       req_wrap->Resolve(link.ToLocalChecked());
+      tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
+    }
   }
 }
 
@@ -766,6 +795,8 @@ void AfterScanDir(uv_fs_t* req) {
   }
 
   req_wrap->Resolve(Array::New(env->isolate(), name_v.data(), name_v.size()));
+  tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
 }
 
 void AfterScanDirWithTypes(uv_fs_t* req) {
@@ -812,6 +843,8 @@ void AfterScanDirWithTypes(uv_fs_t* req) {
     Array::New(isolate, type_v.data(), type_v.size())
   };
   req_wrap->Resolve(Array::New(isolate, result, arraysize(result)));
+  tracepoint(uv_provider, uv_async_file_event,req->id, "exit", 0);
+
 }
 
 void Access(const FunctionCallbackInfo<Value>& args) {

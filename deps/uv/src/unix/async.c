@@ -25,7 +25,7 @@
 #include "uv.h"
 #include "internal.h"
 #include "atomic-ops.h"
-
+#include "uv-tp.h"
 #include <errno.h>
 #include <stdio.h>  /* snprintf() */
 #include <assert.h>
@@ -82,6 +82,9 @@ int uv_async_send(uv_async_t* handle) {
 
 /* Only call this from the event loop thread. */
 static int uv__async_spin(uv_async_t* handle) {
+  
+  tracepoint(uv_provider, uv_async_spin_event, handle->u.fd, handle->pending, handle->loop->backend_fd);
+
   int i;
   int rc;
 
@@ -96,8 +99,12 @@ static int uv__async_spin(uv_async_t* handle) {
        */
       rc = cmpxchgi(&handle->pending, 2, 0);
 
-      if (rc != 1)
+      if (rc != 1) {
+
+        tracepoint(uv_provider, uv_exit_async_spin_event, handle->u.fd, handle->pending, rc, handle->loop->backend_fd);
         return rc;
+
+        }
 
       /* Other thread is busy with this handle, spin until it's done. */
       cpu_relax();
@@ -108,6 +115,9 @@ static int uv__async_spin(uv_async_t* handle) {
      * as us, we'll just burn CPU cycles until the end of our time slice.
      */
     sched_yield();
+      
+    tracepoint(uv_provider, uv_exit_async_spin_event, handle->u.fd, handle->pending, rc, handle->loop->backend_fd);
+
   }
 }
 
@@ -120,6 +130,9 @@ void uv__async_close(uv_async_t* handle) {
 
 
 static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
+       
+  tracepoint(uv_provider, uv_asyncio_event, w->fd, events, loop->backend_fd);
+
   char buf[1024];
   ssize_t r;
   QUEUE queue;
@@ -143,6 +156,7 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     if (errno == EINTR)
       continue;
 
+
     abort();
   }
 
@@ -160,7 +174,10 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     if (h->async_cb == NULL)
       continue;
 
+    tracepoint(uv_provider, uv_run_async_cb_event, w->fd, events, &h->async_cb, &h, loop->backend_fd);
     h->async_cb(h);
+    tracepoint(uv_provider, uv_exit_asyncio_event, w->fd, events, &h->async_cb, loop->backend_fd);
+
   }
 }
 
@@ -183,17 +200,32 @@ static void uv__async_send(uv_loop_t* loop) {
     fd = loop->async_io_watcher.fd;  /* eventfd */
   }
 #endif
+    
+tracepoint(uv_provider, uv_async_send_event, fd, &buf, loop->backend_fd);
 
   do
     r = write(fd, buf, len);
   while (r == -1 && errno == EINTR);
 
-  if (r == len)
+  if (r == len) {
+     tracepoint(uv_provider, uv_exit_async_send_event, fd, &buf, r, loop->backend_fd);
+
     return;
 
+
+  }
+    
+
   if (r == -1)
-    if (errno == EAGAIN || errno == EWOULDBLOCK)
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      tracepoint(uv_provider, uv_exit_async_send_event, fd, &buf, r, loop->backend_fd);
+
       return;
+
+    }
+      
+
+tracepoint(uv_provider, uv_exit_async_send_event, fd, &buf, r, loop->backend_fd);
 
   abort();
 }
@@ -208,9 +240,14 @@ static int uv__async_start(uv_loop_t* loop) {
 
 #ifdef __linux__
   err = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-  if (err < 0)
-    return UV__ERR(errno);
+  tracepoint(uv_provider, uv_async_start_event, err, loop->async_io_watcher.fd, loop->backend_fd);
 
+  if (err < 0) {
+     
+  tracepoint(uv_provider, uv_exit_async_start_event, err, loop->async_io_watcher.fd, loop->backend_fd);
+  return UV__ERR(errno);
+
+  }  
   pipefd[0] = err;
   pipefd[1] = -1;
 #else
@@ -222,6 +259,8 @@ static int uv__async_start(uv_loop_t* loop) {
   uv__io_init(&loop->async_io_watcher, uv__async_io, pipefd[0]);
   uv__io_start(loop, &loop->async_io_watcher, POLLIN);
   loop->async_wfd = pipefd[1];
+  
+  tracepoint(uv_provider, uv_async_start_event, err, loop->async_io_watcher.fd, loop->backend_fd);
 
   return 0;
 }
@@ -243,11 +282,16 @@ void uv__async_stop(uv_loop_t* loop) {
 
   if (loop->async_wfd != -1) {
     if (loop->async_wfd != loop->async_io_watcher.fd)
+      tracepoint(uv_provider, uv_close_asyncfd_event, loop->async_wfd, loop->backend_fd);
+
       uv__close(loop->async_wfd);
     loop->async_wfd = -1;
   }
 
   uv__io_stop(loop, &loop->async_io_watcher, POLLIN);
   uv__close(loop->async_io_watcher.fd);
+
+  tracepoint(uv_provider, uv_close_asyncfd_event, loop->async_io_watcher.fd, loop->backend_fd);
+
   loop->async_io_watcher.fd = -1;
 }

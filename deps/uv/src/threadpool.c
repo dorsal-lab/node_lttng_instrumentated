@@ -20,7 +20,6 @@
  */
 
 #include "uv-common.h"
-
 #if !defined(_WIN32)
 # include "unix/internal.h"
 #endif
@@ -63,6 +62,11 @@ static void worker(void* arg) {
   arg = NULL;
 
   uv_mutex_lock(&mutex);
+      tracepoint(uv_provider, uv_mutex_event,0, 1, 0);
+
+  
+  tracepoint(uv_provider, uv_worker_event,gettid(), 0);
+
   for (;;) {
     /* `mutex` should always be locked at this point. */
 
@@ -81,10 +85,14 @@ static void worker(void* arg) {
     if (q == &exit_message) {
       uv_cond_signal(&cond);
       uv_mutex_unlock(&mutex);
+      tracepoint(uv_provider, uv_mutex_event,0, 0,0);
+
       break;
     }
 
     QUEUE_REMOVE(q);
+    //tracepoint(uv_provider, uv_workerq_remove_event,&wq, 0);
+
     QUEUE_INIT(q);  /* Signal uv_cancel() that the work req is executing. */
 
     is_slow_work = 0;
@@ -93,6 +101,8 @@ static void worker(void* arg) {
          other work in the queue is done. */
       if (slow_io_work_running >= slow_work_thread_threshold()) {
         QUEUE_INSERT_TAIL(&wq, q);
+        tracepoint(uv_provider, uv_insert_reschedule_workq_event, &q, &wq, &slow_io_work_running, 0);
+
         continue;
       }
 
@@ -106,40 +116,58 @@ static void worker(void* arg) {
 
       q = QUEUE_HEAD(&slow_io_pending_wq);
       QUEUE_REMOVE(q);
+      //tracepoint(uv_provider, uv_workerq_remove_event, &slow_io_pending_wq, 0);
+
       QUEUE_INIT(q);
 
       /* If there is more slow I/O work, schedule it to be run as well. */
       if (!QUEUE_EMPTY(&slow_io_pending_wq)) {
         QUEUE_INSERT_TAIL(&wq, &run_slow_work_message);
+        w = QUEUE_DATA(q, struct uv__work, wq);
+        tracepoint(uv_provider, uv_insert_reschedule_workq_event, &run_slow_work_message, &wq, &slow_io_work_running,w->loop->backend_fd);
+
         if (idle_threads > 0)
           uv_cond_signal(&cond);
       }
     }
 
     uv_mutex_unlock(&mutex);
+    tracepoint(uv_provider, uv_mutex_event,0, 0,0);
+
 
     w = QUEUE_DATA(q, struct uv__work, wq);
+    tracepoint(uv_provider, uv_worker_event,gettid(), w->sub_idx);
+    tracepoint(uv_provider, uv_workerq_remove_event,gettid(), w->sub_idx);
     w->work(w);
-
+    
     uv_mutex_lock(&w->loop->wq_mutex);
+    tracepoint(uv_provider, uv_mutex_event,1, 0,0);
+
     w->work = NULL;  /* Signal uv_cancel() that the work req is done
                         executing. */
     QUEUE_INSERT_TAIL(&w->loop->wq, &w->wq);
     uv_async_send(&w->loop->wq_async);
     uv_mutex_unlock(&w->loop->wq_mutex);
+    tracepoint(uv_provider, uv_mutex_event,0, 0,0);
+
 
     /* Lock `mutex` since that is expected at the start of the next
      * iteration. */
     uv_mutex_lock(&mutex);
+    tracepoint(uv_provider, uv_mutex_event,0, 1,0);
+
     if (is_slow_work) {
       /* `slow_io_work_running` is protected by `mutex`. */
       slow_io_work_running--;
     }
   }
+    tracepoint(uv_provider, uv_exit_worker_event,&wq, &slow_io_pending_wq, &arg,w->sub_idx);
+
 }
 
 
 static void post(QUEUE* q, enum uv__work_kind kind) {
+  struct uv__work* w;
   uv_mutex_lock(&mutex);
   if (kind == UV__WORK_SLOW_IO) {
     /* Insert into a separate queue. */
@@ -148,12 +176,16 @@ static void post(QUEUE* q, enum uv__work_kind kind) {
       /* Running slow I/O tasks is already scheduled => Nothing to do here.
          The worker that runs said other task will schedule this one as well. */
       uv_mutex_unlock(&mutex);
+      tracepoint(uv_provider, uv_insertslowio_pendwq_event,&q, &slow_io_pending_wq, &wq, 0);
       return;
     }
     q = &run_slow_work_message;
+    tracepoint(uv_provider, uv_insertslowio_pendwq_event,&q, &slow_io_pending_wq, &wq, 0);
   }
 
   QUEUE_INSERT_TAIL(&wq, q);
+   w = container_of(q, struct uv__work, wq);
+  tracepoint(uv_provider, uv_insert_workq_event,&q, &slow_io_pending_wq, &wq, w->sub_idx);
   if (idle_threads > 0)
     uv_cond_signal(&cond);
   uv_mutex_unlock(&mutex);
@@ -258,11 +290,14 @@ void uv__work_submit(uv_loop_t* loop,
                      enum uv__work_kind kind,
                      void (*work)(struct uv__work* w),
                      void (*done)(struct uv__work* w, int status)) {
+  tracepoint(uv_provider, uv_work_submit_event,&loop, &work, &w, &done, w->sub_idx);
   uv_once(&once, init_once);
   w->loop = loop;
   w->work = work;
   w->done = done;
   post(&w->wq, kind);
+  tracepoint(uv_provider, uv_exit_work_submit_event,&loop, &work, &w, &done, w->sub_idx);
+
 }
 
 
@@ -309,9 +344,14 @@ void uv__work_done(uv_async_t* handle) {
     QUEUE_REMOVE(q);
 
     w = container_of(q, struct uv__work, wq);
+    
     err = (w->work == uv__cancelled) ? UV_ECANCELED : 0;
     w->done(w, err);
+    tracepoint(uv_provider, uv_done_event,w->sub_idx, loop->backend_fd);
+    
   }
+    
+
 }
 
 
@@ -346,6 +386,8 @@ int uv_queue_work(uv_loop_t* loop,
   req->loop = loop;
   req->work_cb = work_cb;
   req->after_work_cb = after_work_cb;
+
+  
   uv__work_submit(loop,
                   &req->work_req,
                   UV__WORK_CPU,

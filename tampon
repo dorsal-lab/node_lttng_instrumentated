@@ -1,0 +1,221 @@
+ if(event.getName().equals("uv_provider:uv_workerq_remove_event")) {
+
+                mutex++;
+
+                if(id_kept!=null || ch_kept!=null) {
+                int q_context_store = ss.getQuarkRelativeAndAdd(q_theia, "Context");
+                int q_context_cpu_store = ss.getQuarkRelativeAndAdd(q_context_store, String.valueOf(cpu));
+                ss.modifyAttribute(ts, "0", q_context_cpu_store);
+
+
+                int q_cpu_chid_store = ss.getQuarkRelativeAndAdd(q_theia, "cpu_store");
+                int q_chid_store = ss.getQuarkRelativeAndAdd(q_cpu_chid_store, String.valueOf(cpu));
+                int q_chid_id_store = ss.getQuarkRelativeAndAdd(q_chid_store, "id");
+                ss.modifyAttribute(ts, id_kept, q_chid_id_store);
+
+                int q_chid_ch_store = ss.getQuarkRelativeAndAdd(q_chid_store, "ch");
+                ss.modifyAttribute(ts, ch_kept, q_chid_ch_store);
+
+                }
+
+
+
+                if(event.getName().equals("uv_provider:uv_write_stream")) {
+                	
+                }
+
+
+
+            }
+            
+            if(event.getName().equals("uv_provider:uv_timerPhase_event")) {
+            	 
+            	String tid=event.getContent().getFieldValue(String.class, "context._pthread_id");
+            	
+            	int q_metrics = ss.getQuarkRelativeAndAdd(q_theia, "Metrics");
+                int q_nextick = ss.getQuarkRelativeAndAdd(q_metrics, "Tick_latency");
+                int q_freq = ss.getQuarkRelativeAndAdd(q_metrics, "Tick_frequency");
+                int q_thread_freq = ss.getQuarkRelativeAndAdd(q_freq , tid);
+           	    int q_thread = ss.getQuarkRelativeAndAdd(q_nextick , tid);
+           	    if(thread_tr.get(tid)==null)  {
+           	    	start_time=ss.getStartTime();
+           	    	thread_tr.put(tid, 0);
+           	    }
+           	    
+           	    
+           	    long rts=ts-start_time;
+           	    
+           	    if(rts<=1000000000) {
+           	    	thread_tr.put(tid, thread_tr.get(tid)+1);
+           	    	
+           	    }
+           	    else {
+           	    	
+           	    	ss.modifyAttribute(ts, thread_tr.get(tid), q_thread_freq);
+           	    	thread_tr.put(tid, 0);
+           	    	start_time=ts;
+           	    	
+           	    }
+           	    
+           	    
+           	    	
+           	  
+           	    
+           	    if(tick_ts.get(tid)==null) {
+           	    
+           	    	//ss.modifyAttribute(ts, tid, q_thread);
+           	    	tick_ts.put(tid,  ts);
+           	    }
+           	    else {
+                //String state = String.valueOf(ss.queryOngoing(q_thread));
+                ss.modifyAttribute(ts, (ts-tick_ts.get(tid))/1000000, q_thread);
+                //if(!state.equals("null")||!state.equals("nullValue")||state!=null) {
+           	    //long cur_ts= ss.getOngoingStartTime(q_thread);
+           	    //ss.modifyAttribute(ts, (ts-cur_ts)/1000000, q_thread);
+           	    //ss.modifyAttribute(ts, null, q_thread);
+           	    tick_ts.remove(tid);
+                }
+           	    
+           	    
+            	
+            	
+            }
+
+            
+            
+            if(event.getName().equals("uv_provider:uv_timersq_remove_event")) {
+            	
+            	 
+            	String tid=event.getContent().getFieldValue(String.class, "context._pthread_id");
+                
+         	    int q_metrics = ss.getQuarkRelativeAndAdd(q_theia, "Metrics");
+                int q_timer = ss.getQuarkRelativeAndAdd(q_metrics, "Timers_queue");
+                
+                int q_thread_timer = ss.getQuarkRelativeAndAdd(q_timer , tid);
+                
+                if(timer_tr.get(tid)!=null)
+                	timer_tr.put(tid, timer_tr.get(tid)-1);
+                else
+                	timer_tr.put(tid, 0);
+                
+                ss.modifyAttribute(ts, timer_tr.get(tid), q_thread_timer);
+            	
+            	
+            }
+            
+           if(event.getName().equals("uv_provider:uv_timersq_insert_event")) {
+        	   
+        	   String tid=event.getContent().getFieldValue(String.class, "context._pthread_id");
+               if(timer_tr.get(tid)!=null)
+            	   timer_tr.put(tid, timer_tr.get(tid)+1);
+               else
+            	   timer_tr.put(tid, 1);
+               
+        	   int q_metrics = ss.getQuarkRelativeAndAdd(q_theia, "Metrics");
+               int q_timer = ss.getQuarkRelativeAndAdd(q_metrics, "Timers_queue");
+               
+               int q_thread_timer = ss.getQuarkRelativeAndAdd(q_timer , tid);
+               ss.modifyAttribute(ts, timer_tr.get(tid), q_thread_timer);
+          	    
+            	
+            	
+            }
+           
+           if(event.getName().equals("uv_provider:uv_timersq_insert_event")) {
+        	   String id_timer=event.getContent().getFieldValue(String.class, "data");
+        	   
+             
+          	    timer_latency.put(id_timer,  ts);
+            	
+            	
+            }
+           
+           if(event.getName().equals("uv_provider:uv_run_timers_event")) {
+        	   String id_timer=event.getContent().getFieldValue(String.class, "backend_fd");
+        	   String tid=event.getContent().getFieldValue(String.class, "context._pthread_id");
+        	   int q_metrics = ss.getQuarkRelativeAndAdd(q_theia, "Metrics");
+               int q_timer = ss.getQuarkRelativeAndAdd(q_metrics, "Timers_latency");
+               
+               int q_thread_timer = ss.getQuarkRelativeAndAdd(q_timer , tid);
+               if(timer_latency.get(id_timer)!=null) {
+            	   
+               ss.modifyAttribute(ts, (ts-timer_latency.get(id_timer))/1000000, q_thread_timer);
+          	   timer_latency.remove(id_timer);
+               }
+            	
+            	
+            }
+           
+           
+           if(event.getName().equals("uv_provider:uv_work_submit_event")) {
+        	   String id_worker=event.getContent().getFieldValue(String.class, "backend_fd");
+        	   String tid=event.getContent().getFieldValue(String.class, "context._pthread_id");
+             
+          	    worker_latency.put(id_worker,  ts);
+          	    worker_tid.put(id_worker, tid);
+            	
+            	
+            }
+           
+           
+           if(event.getName().equals("uv_provider:uv_worker_event")) {
+        	   String id_worker=event.getContent().getFieldValue(String.class, "backend_fd");
+        	   String tid=event.getContent().getFieldValue(String.class, "context._pthread_id");
+        	   int q_metrics = ss.getQuarkRelativeAndAdd(q_theia, "Metrics");
+               int q_workers = ss.getQuarkRelativeAndAdd(q_metrics, "Workers_latency");
+               
+               
+               if(worker_latency.get(id_worker)!=null) {
+               int q_thread_worker = ss.getQuarkRelativeAndAdd(q_workers , worker_tid.get(id_worker));  
+               ss.modifyAttribute(ts, (ts-worker_latency.get(id_worker))/1000, q_thread_worker);
+          	   worker_latency.remove(id_worker);
+          	   worker_tid.remove(id_worker);
+               }
+            	
+            	
+            }
+
+
+
+
+            if(event.getName().equals("uv_provider:uv_async_file_event")) {
+            	
+
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+             if(event.getName().startsWith("syscall_entry")) {
+
+
+
+
+             }
+
+
+
+             if(event.getName().startsWith("syscall_exit")) {
+
+                
+
+
+             }
+
+
+              if(event.getName().equals("sched_switch")) {
+                 
+
+            }
