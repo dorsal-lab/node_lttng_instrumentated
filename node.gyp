@@ -5,6 +5,7 @@
     'v8_enable_pointer_compression%': 0,
     'v8_enable_31bit_smis_on_64bit_arch%': 0,
     'node_use_dtrace%': 'false',
+    'node_use_lttng%': 'false',
     'node_use_etw%': 'false',
     'node_no_browser_globals%': 'false',
     'node_snapshot_main%': '',
@@ -111,7 +112,7 @@
         'ImageHasSafeExceptionHandlers': 'false',
       },
     },
-
+    'libraries': [ '-llttng-ust', '-ldl' ], 
     'conditions': [
       ['OS=="aix"', {
         'ldflags': [
@@ -694,6 +695,16 @@
             'Ws2_32',
           ],
         }],
+        [ 'node_use_lttng=="true"', {
+              'defines': [ 'HAVE_LTTNG=1' ],
+              'include_dirs': [ '<(SHARED_INTERMEDIATE_DIR)','src' ],
+              'sources': [
+                'src/node_lttng.cc',
+                'src/node_lttng_provider.h',
+                'deps/v8/include/v8.h',
+              ],
+          'libraries': [ '-llttng-ust','-ldl' ],
+        }],
         [ 'node_use_etw=="true"', {
           'defines': [ 'HAVE_ETW=1' ],
           'dependencies': [ 'node_etw' ],
@@ -1129,6 +1140,7 @@
     {
       'target_name': 'cctest',
       'type': 'executable',
+      'libraries': [ '-llttng-ust','-ldl' ],
 
       'dependencies': [
         '<(node_lib_target_name)',
@@ -1233,6 +1245,7 @@
     {
       'target_name': 'embedtest',
       'type': 'executable',
+      'libraries': [ '-llttng-ust','-ldl' ],
 
       'dependencies': [
         '<(node_lib_target_name)',
@@ -1368,6 +1381,7 @@
     {
       'target_name': 'node_mksnapshot',
       'type': 'executable',
+      'libraries': [ '-llttng-ust','-ldl' ],
 
       'dependencies': [
         '<(node_lib_target_name)',

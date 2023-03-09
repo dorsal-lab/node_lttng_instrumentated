@@ -15,7 +15,7 @@
 
 #ifndef UV_SRC_HEAP_H_
 #define UV_SRC_HEAP_H_
-
+#include "uv/lttng-tp-provider.h"
 #include <stddef.h>  /* NULL */
 
 #if defined(__GNUC__)
@@ -136,6 +136,9 @@ HEAP_EXPORT(void heap_insert(struct heap* heap,
   }
 
   /* Insert the new node. */
+  uv_timer_t* handle = container_of(newnode, uv_timer_t, heap_node);
+  handle->start_id = random();
+  tracepoint(uv, timersq_insert_event, handle->u.fd, handle->start_id, 0);
   newnode->parent = *parent;
   *child = newnode;
   heap->nelts += 1;

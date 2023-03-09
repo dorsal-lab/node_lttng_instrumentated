@@ -32,6 +32,12 @@
 #define NODE_BUILTIN_DTRACE_MODULES(V)
 #endif
 
+#if HAVE_LTTNG
+#define NODE_BUILTIN_LTTNG_MODULES(V) V(lttng)
+#else
+#define NODE_BUILTIN_LTTNG_MODULES(V)
+#endif
+
 // A list of built-in modules. In order to do module registration
 // in node::Init(), need to add built-in modules in the following list.
 // Then in binding::RegisterBuiltinModules(), it calls modules' registration

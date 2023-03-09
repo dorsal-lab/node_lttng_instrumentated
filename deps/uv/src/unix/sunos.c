@@ -20,6 +20,7 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "uv/lttng-tp-provider.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -317,8 +318,10 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         continue;  /* Disabled by callback. */
 
       /* Events Ports operates in oneshot mode, rearm timer on next run. */
-      if (w->pevents != 0 && QUEUE_EMPTY(&w->watcher_queue))
+      if (w->pevents != 0 && QUEUE_EMPTY(&w->watcher_queue)) {
+        lttng_ust_tracepoint(uv, watcherq_insert_event, w->fd, loop->backend_fd, loop->backend_fd);
         QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
+      }
     }
 
     if (reset_timeout != 0) {

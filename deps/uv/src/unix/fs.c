@@ -28,6 +28,7 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "uv/lttng-tp-provider.h"
 
 #include <errno.h>
 #include <dlfcn.h>
@@ -151,6 +152,7 @@ extern char *mkdtemp(char *template); /* See issue #740 on AIX < 7 */
   do {                                                                        \
     if (cb != NULL) {                                                         \
       uv__req_register(loop, req);                                            \
+      req->work_req.request_id = req->uid;                                    \
       uv__work_submit(loop,                                                   \
                       &req->work_req,                                         \
                       UV__WORK_FAST_IO,                                       \
@@ -521,7 +523,7 @@ done:
     }
   }
 #endif
-
+  lttng_ust_tracepoint(uv, exit_fs_read_event, gettid(), req->uid, 0);
   return result;
 }
 
@@ -1739,10 +1741,13 @@ static void uv__fs_work(struct uv__work* w) {
 #undef X
   } while (r == -1 && errno == EINTR && retry_on_eintr);
 
-  if (r == -1)
+  if (r == -1) {
     req->result = UV__ERR(errno);
-  else
+    lttng_ust_tracepoint(uv, exit_fs_open_event, req->result, gettid(), req->uid);
+  } else {
     req->result = r;
+    lttng_ust_tracepoint(uv, exit_fs_open_event, req->result, gettid(), req->uid);
+  }
 
   if (r == 0 && (req->fs_type == UV_FS_STAT ||
                  req->fs_type == UV_FS_FSTAT ||
@@ -1762,7 +1767,7 @@ static void uv__fs_done(struct uv__work* w, int status) {
     assert(req->result == 0);
     req->result = UV_ECANCELED;
   }
-
+  lttng_ust_tracepoint(uv, done_event, req->uid, gettid());
   req->cb(req);
 }
 
@@ -1773,6 +1778,7 @@ int uv_fs_access(uv_loop_t* loop,
                  int flags,
                  uv_fs_cb cb) {
   INIT(ACCESS);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->flags = flags;
   POST;
@@ -1785,6 +1791,7 @@ int uv_fs_chmod(uv_loop_t* loop,
                 int mode,
                 uv_fs_cb cb) {
   INIT(CHMOD);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->mode = mode;
   POST;
@@ -1798,6 +1805,7 @@ int uv_fs_chown(uv_loop_t* loop,
                 uv_gid_t gid,
                 uv_fs_cb cb) {
   INIT(CHOWN);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->uid = uid;
   req->gid = gid;
@@ -1807,6 +1815,7 @@ int uv_fs_chown(uv_loop_t* loop,
 
 int uv_fs_close(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
   INIT(CLOSE);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   POST;
 }
@@ -1818,6 +1827,7 @@ int uv_fs_fchmod(uv_loop_t* loop,
                  int mode,
                  uv_fs_cb cb) {
   INIT(FCHMOD);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   req->mode = mode;
   POST;
@@ -1831,6 +1841,7 @@ int uv_fs_fchown(uv_loop_t* loop,
                  uv_gid_t gid,
                  uv_fs_cb cb) {
   INIT(FCHOWN);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   req->uid = uid;
   req->gid = gid;
@@ -1845,6 +1856,7 @@ int uv_fs_lchown(uv_loop_t* loop,
                  uv_gid_t gid,
                  uv_fs_cb cb) {
   INIT(LCHOWN);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->uid = uid;
   req->gid = gid;
@@ -1854,6 +1866,7 @@ int uv_fs_lchown(uv_loop_t* loop,
 
 int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
   INIT(FDATASYNC);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   POST;
 }
@@ -1861,6 +1874,7 @@ int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
 
 int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
   INIT(FSTAT);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   POST;
 }
@@ -1868,6 +1882,7 @@ int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
 
 int uv_fs_fsync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb) {
   INIT(FSYNC);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   POST;
 }
@@ -1879,6 +1894,7 @@ int uv_fs_ftruncate(uv_loop_t* loop,
                     int64_t off,
                     uv_fs_cb cb) {
   INIT(FTRUNCATE);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   req->off = off;
   POST;
@@ -1892,6 +1908,7 @@ int uv_fs_futime(uv_loop_t* loop,
                  double mtime,
                  uv_fs_cb cb) {
   INIT(FUTIME);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->file = file;
   req->atime = atime;
   req->mtime = mtime;
@@ -1905,6 +1922,7 @@ int uv_fs_lutime(uv_loop_t* loop,
                  double mtime,
                  uv_fs_cb cb) {
   INIT(LUTIME);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->atime = atime;
   req->mtime = mtime;
@@ -1914,6 +1932,7 @@ int uv_fs_lutime(uv_loop_t* loop,
 
 int uv_fs_lstat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
   INIT(LSTAT);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }
@@ -1925,6 +1944,7 @@ int uv_fs_link(uv_loop_t* loop,
                const char* new_path,
                uv_fs_cb cb) {
   INIT(LINK);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH2;
   POST;
 }
@@ -1936,6 +1956,7 @@ int uv_fs_mkdir(uv_loop_t* loop,
                 int mode,
                 uv_fs_cb cb) {
   INIT(MKDIR);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->mode = mode;
   POST;
@@ -1972,7 +1993,9 @@ int uv_fs_open(uv_loop_t* loop,
                int flags,
                int mode,
                uv_fs_cb cb) {
+  lttng_ust_tracepoint(uv, fs_open_event, gettid(), &path, req->uid);
   INIT(OPEN);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->flags = flags;
   req->mode = mode;
@@ -1987,9 +2010,13 @@ int uv_fs_read(uv_loop_t* loop, uv_fs_t* req,
                int64_t off,
                uv_fs_cb cb) {
   INIT(READ);
+  lttng_ust_tracepoint(uv, fs_read_event, &req->ptr, req->uid);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
 
-  if (bufs == NULL || nbufs == 0)
+  if (bufs == NULL || nbufs == 0) {
+    tracepoint(uv, exit_fs_read_event, gettid(), req->uid, UV_EINVAL);
     return UV_EINVAL;
+  }
 
   req->file = file;
 
@@ -1998,8 +2025,10 @@ int uv_fs_read(uv_loop_t* loop, uv_fs_t* req,
   if (nbufs > ARRAY_SIZE(req->bufsml))
     req->bufs = uv__malloc(nbufs * sizeof(*bufs));
 
-  if (req->bufs == NULL)
+  if (req->bufs == NULL) {
+    tracepoint(uv, exit_fs_read_event, gettid(), req->uid, UV_EINVAL);
     return UV_ENOMEM;
+  }
 
   memcpy(req->bufs, bufs, nbufs * sizeof(*bufs));
 
@@ -2014,6 +2043,7 @@ int uv_fs_scandir(uv_loop_t* loop,
                   int flags,
                   uv_fs_cb cb) {
   INIT(SCANDIR);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->flags = flags;
   POST;
@@ -2024,6 +2054,7 @@ int uv_fs_opendir(uv_loop_t* loop,
                   const char* path,
                   uv_fs_cb cb) {
   INIT(OPENDIR);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }
@@ -2033,6 +2064,7 @@ int uv_fs_readdir(uv_loop_t* loop,
                   uv_dir_t* dir,
                   uv_fs_cb cb) {
   INIT(READDIR);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
 
   if (dir == NULL || dir->dir == NULL || dir->dirents == NULL)
     return UV_EINVAL;
@@ -2046,6 +2078,7 @@ int uv_fs_closedir(uv_loop_t* loop,
                    uv_dir_t* dir,
                    uv_fs_cb cb) {
   INIT(CLOSEDIR);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
 
   if (dir == NULL)
     return UV_EINVAL;
@@ -2059,6 +2092,7 @@ int uv_fs_readlink(uv_loop_t* loop,
                    const char* path,
                    uv_fs_cb cb) {
   INIT(READLINK);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }
@@ -2069,6 +2103,7 @@ int uv_fs_realpath(uv_loop_t* loop,
                   const char * path,
                   uv_fs_cb cb) {
   INIT(REALPATH);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }
@@ -2080,6 +2115,7 @@ int uv_fs_rename(uv_loop_t* loop,
                  const char* new_path,
                  uv_fs_cb cb) {
   INIT(RENAME);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH2;
   POST;
 }
@@ -2087,6 +2123,7 @@ int uv_fs_rename(uv_loop_t* loop,
 
 int uv_fs_rmdir(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
   INIT(RMDIR);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }
@@ -2100,6 +2137,7 @@ int uv_fs_sendfile(uv_loop_t* loop,
                    size_t len,
                    uv_fs_cb cb) {
   INIT(SENDFILE);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   req->flags = in_fd; /* hack */
   req->file = out_fd;
   req->off = off;
@@ -2110,6 +2148,7 @@ int uv_fs_sendfile(uv_loop_t* loop,
 
 int uv_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
   INIT(STAT);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }
@@ -2130,6 +2169,7 @@ int uv_fs_symlink(uv_loop_t* loop,
 
 int uv_fs_unlink(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb) {
   INIT(UNLINK);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }
@@ -2142,6 +2182,7 @@ int uv_fs_utime(uv_loop_t* loop,
                 double mtime,
                 uv_fs_cb cb) {
   INIT(UTIME);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   req->atime = atime;
   req->mtime = mtime;
@@ -2157,6 +2198,7 @@ int uv_fs_write(uv_loop_t* loop,
                 int64_t off,
                 uv_fs_cb cb) {
   INIT(WRITE);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
 
   if (bufs == NULL || nbufs == 0)
     return UV_EINVAL;
@@ -2218,6 +2260,7 @@ int uv_fs_copyfile(uv_loop_t* loop,
                    int flags,
                    uv_fs_cb cb) {
   INIT(COPYFILE);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
 
   if (flags & ~(UV_FS_COPYFILE_EXCL |
                 UV_FS_COPYFILE_FICLONE |
@@ -2236,6 +2279,7 @@ int uv_fs_statfs(uv_loop_t* loop,
                  const char* path,
                  uv_fs_cb cb) {
   INIT(STATFS);
+  lttng_ust_tracepoint(uv, async_file_event, req->uid, req->type, gettid());
   PATH;
   POST;
 }

@@ -21,6 +21,7 @@
 
 #include "uv.h"
 #include "internal.h"
+#include "uv/lttng-tp-provider.h"
 #include <errno.h>
 #include <sys/epoll.h>
 
@@ -146,6 +147,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     QUEUE_INIT(q);
 
     w = QUEUE_DATA(q, uv__io_t, watcher_queue);
+
+    lttng_ust_tracepoint(uv, watcherq_remove_event, w->fd, loop->backend_fd, loop->backend_fd);
     assert(w->pevents != 0);
     assert(w->fd >= 0);
     assert(w->fd < (int) loop->nwatchers);
@@ -223,20 +226,24 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         abort();
 
     if (no_epoll_wait != 0 || (sigmask != 0 && no_epoll_pwait == 0)) {
+      lttng_ust_tracepoint(uv, io_poll_event, w->pevents, w->fd, w->events,loop->backend_fd, op, nfds,pe->data.fd, &pe->data.ptr);
       nfds = epoll_pwait(loop->backend_fd,
                          events,
                          ARRAY_SIZE(events),
                          timeout,
                          &sigset);
+      lttng_ust_tracepoint(uv, exit_io_poll_event, w->pevents, w->fd, w->events,loop->backend_fd, op, nfds,pe->data.fd, &pe->data.ptr);
       if (nfds == -1 && errno == ENOSYS) {
         uv__store_relaxed(&no_epoll_pwait_cached, 1);
         no_epoll_pwait = 1;
       }
     } else {
+      lttng_ust_tracepoint(uv, out_io_poll_event, 0, 0, 0);
       nfds = epoll_wait(loop->backend_fd,
                         events,
                         ARRAY_SIZE(events),
                         timeout);
+      lttng_ust_tracepoint(uv, exit_out_io_poll_event, 0, 0, 0);
       if (nfds == -1 && errno == ENOSYS) {
         uv__store_relaxed(&no_epoll_wait_cached, 1);
         no_epoll_wait = 1;

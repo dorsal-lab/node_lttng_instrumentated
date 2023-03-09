@@ -9,4 +9,5 @@ declare function InternalBinding(binding: 'config'): {
   noBrowserGlobals: boolean;
   bits: number;
   hasDtrace: boolean;
+  hasLTTng: boolean;
 };

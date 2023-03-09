@@ -24,7 +24,7 @@
 #if !defined(_WIN32)
 # include "unix/internal.h"
 #endif
-
+#include "uv/lttng-tp-provider.h"
 #include <stdlib.h>
 
 #define MAX_THREADPOOL_SIZE 1024
@@ -63,6 +63,7 @@ static void worker(void* arg) {
   arg = NULL;
 
   uv_mutex_lock(&mutex);
+  lttng_ust_tracepoint(uv, worker_event, gettid(), 0);
   for (;;) {
     /* `mutex` should always be locked at this point. */
 
@@ -93,6 +94,7 @@ static void worker(void* arg) {
          other work in the queue is done. */
       if (slow_io_work_running >= slow_work_thread_threshold()) {
         QUEUE_INSERT_TAIL(&wq, q);
+        lttng_ust_tracepoint(uv, insert_reschedule_workq_event, &q, &wq, &slow_io_work_running, 0);
         continue;
       }
 
@@ -111,6 +113,8 @@ static void worker(void* arg) {
       /* If there is more slow I/O work, schedule it to be run as well. */
       if (!QUEUE_EMPTY(&slow_io_pending_wq)) {
         QUEUE_INSERT_TAIL(&wq, &run_slow_work_message);
+        w = QUEUE_DATA(q, struct uv__work, wq);
+        lttng_ust_tracepoint(uv, insert_reschedule_workq_event, &run_slow_work_message, &wq, &slow_io_work_running, w->loop->backend_fd);
         if (idle_threads > 0)
           uv_cond_signal(&cond);
       }
@@ -119,6 +123,8 @@ static void worker(void* arg) {
     uv_mutex_unlock(&mutex);
 
     w = QUEUE_DATA(q, struct uv__work, wq);
+    lttng_ust_tracepoint(uv, worker_event, gettid(), w->request_id);
+    lttng_ust_tracepoint(uv, workerq_remove_event, gettid(), w->request_id);
     w->work(w);
 
     uv_mutex_lock(&w->loop->wq_mutex);
@@ -136,6 +142,7 @@ static void worker(void* arg) {
       slow_io_work_running--;
     }
   }
+  lttng_ust_tracepoint(uv, exit_worker_event, &wq, &slow_io_pending_wq, &arg, w->request_id);
 }
 
 
@@ -148,12 +155,16 @@ static void post(QUEUE* q, enum uv__work_kind kind) {
       /* Running slow I/O tasks is already scheduled => Nothing to do here.
          The worker that runs said other task will schedule this one as well. */
       uv_mutex_unlock(&mutex);
+      lttng_ust_tracepoint(uv, insertslowio_pendwq_event, &q, &slow_io_pending_wq, &wq, 0);
       return;
     }
     q = &run_slow_work_message;
+    lttng_ust_tracepoint(uv, insertslowio_pendwq_event, &q, &slow_io_pending_wq, &wq, 0);
   }
 
   QUEUE_INSERT_TAIL(&wq, q);
+  struct uv__work* w = container_of(q, struct uv__work, wq);
+  lttng_ust_tracepoint(uv, insert_workq_event, &q, &slow_io_pending_wq, &wq, w->request_id);
   if (idle_threads > 0)
     uv_cond_signal(&cond);
   uv_mutex_unlock(&mutex);
@@ -263,11 +274,13 @@ void uv__work_submit(uv_loop_t* loop,
                      enum uv__work_kind kind,
                      void (*work)(struct uv__work* w),
                      void (*done)(struct uv__work* w, int status)) {
+  lttng_ust_tracepoint(uv, work_submit_event, &loop, &work, &w, &done, w->request_id);
   uv_once(&once, init_once);
   w->loop = loop;
   w->work = work;
   w->done = done;
   post(&w->wq, kind);
+  lttng_ust_tracepoint(uv, exit_work_submit_event, &loop, &work, &w, &done, w->request_id);
 }
 
 
@@ -316,6 +329,7 @@ void uv__work_done(uv_async_t* handle) {
     w = container_of(q, struct uv__work, wq);
     err = (w->work == uv__cancelled) ? UV_ECANCELED : 0;
     w->done(w, err);
+    lttng_ust_tracepoint(uv, done_event, w->request_id, loop->backend_fd);
   }
 }
 

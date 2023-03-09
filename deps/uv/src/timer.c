@@ -21,6 +21,7 @@
 #include "uv.h"
 #include "uv-common.h"
 #include "heap-inl.h"
+#include "uv/lttng-tp-provider.h"
 
 #include <assert.h>
 #include <limits.h>
@@ -104,6 +105,7 @@ int uv_timer_stop(uv_timer_t* handle) {
               timer_less_than);
   uv__handle_stop(handle);
 
+  lttng_ust_tracepoint(uv, timersq_remove_event, handle->u.fd, handle->start_id, 0);
   return 0;
 }
 
@@ -163,7 +165,8 @@ int uv__next_timeout(const uv_loop_t* loop) {
 void uv__run_timers(uv_loop_t* loop) {
   struct heap_node* heap_node;
   uv_timer_t* handle;
-
+  int index = random();
+  lttng_ust_tracepoint(uv, timer_phase_event, index);
   for (;;) {
     heap_node = heap_min(timer_heap(loop));
     if (heap_node == NULL)
@@ -175,8 +178,10 @@ void uv__run_timers(uv_loop_t* loop) {
 
     uv_timer_stop(handle);
     uv_timer_again(handle);
+    lttng_ust_tracepoint(uv, run_timers_event, handle->u.fd, &(handle->timer_cb), handle->start_id);
     handle->timer_cb(handle);
   }
+  lttng_ust_tracepoint(uv, exit_timer_phase_event, index);
 }
 
 

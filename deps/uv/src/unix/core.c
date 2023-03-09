@@ -84,6 +84,7 @@ extern char** environ;
 #endif
 
 #if defined(__linux__)
+#include "uv/lttng-tp-provider.h"
 # include <sys/syscall.h>
 # define uv__accept4 accept4
 #endif
@@ -313,6 +314,8 @@ static void uv__run_closing_handles(uv_loop_t* loop) {
   uv_handle_t* p;
   uv_handle_t* q;
 
+  int index = random();
+  lttng_ust_tracepoint(uv, closinghandle_event, index);
   p = loop->closing_handles;
   loop->closing_handles = NULL;
 
@@ -321,6 +324,7 @@ static void uv__run_closing_handles(uv_loop_t* loop) {
     uv__finish_close(p);
     p = q;
   }
+  lttng_ust_tracepoint(uv, exit_closinghandle_event, index);
 }
 
 
@@ -376,11 +380,17 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     uv__update_time(loop);
 
   while (r != 0 && loop->stop_flag == 0) {
+    lttng_ust_tracepoint(uv, run_event, 0, loop->backend_fd);
+    int index = random();
     uv__update_time(loop);
     uv__run_timers(loop);
     ran_pending = uv__run_pending(loop);
+    lttng_ust_tracepoint(uv, run_idle_event, 0, loop->backend_fd, index);
     uv__run_idle(loop);
+    lttng_ust_tracepoint(uv, exit_run_idle_event, 0, loop->backend_fd, index);
+    lttng_ust_tracepoint(uv, preparephase_event, index);
     uv__run_prepare(loop);
+    lttng_ust_tracepoint(uv, exit_preparephase_event, index);
 
     timeout = 0;
     if ((mode == UV_RUN_ONCE && !ran_pending) || mode == UV_RUN_DEFAULT)
@@ -395,7 +405,9 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
      */
     uv__metrics_update_idle_time(loop);
 
+    lttng_ust_tracepoint(uv, runcheck_event);
     uv__run_check(loop);
+    lttng_ust_tracepoint(uv, exit_runcheck_event);
     uv__run_closing_handles(loop);
 
     if (mode == UV_RUN_ONCE) {
@@ -422,6 +434,7 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   if (loop->stop_flag != 0)
     loop->stop_flag = 0;
 
+  lttng_ust_tracepoint(uv, exit_run_event, 0, loop->backend_fd);
   return r;
 }
 
@@ -443,14 +456,19 @@ int uv__socket(int domain, int type, int protocol) {
 
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
   sockfd = socket(domain, type | SOCK_NONBLOCK | SOCK_CLOEXEC, protocol);
-  if (sockfd != -1)
+  if (sockfd != -1) {
+    lttng_ust_tracepoint(uv, socket_event, sockfd, type, protocol, 0);
     return sockfd;
+  }
 
-  if (errno != EINVAL)
+  if (errno != EINVAL) {
+    lttng_ust_tracepoint(uv, socket_event, UV__ERR(errno), type, protocol, 0);
     return UV__ERR(errno);
+  }
 #endif
 
   sockfd = socket(domain, type, protocol);
+  lttng_ust_tracepoint(uv, socket_event, sockfd, type, protocol, 0);
   if (sockfd == -1)
     return UV__ERR(errno);
 
@@ -577,11 +595,14 @@ int uv__close_nocheckstdio(int fd) {
 
 
 int uv__close(int fd) {
+  int rc;
   assert(fd > STDERR_FILENO);  /* Catch stdio close bugs. */
 #if defined(__MVS__)
   SAVE_ERRNO(epoll_file_close(fd));
 #endif
-  return uv__close_nocheckstdio(fd);
+  rc = uv__close_nocheckstdio(fd);
+  lttng_ust_tracepoint(uv, close_event, fd, rc, 0);
+  return rc;
 }
 
 #if UV__NONBLOCK_IS_IOCTL
@@ -592,9 +613,11 @@ int uv__nonblock_ioctl(int fd, int set) {
     r = ioctl(fd, FIONBIO, &set);
   while (r == -1 && errno == EINTR);
 
-  if (r)
+  if (r) {
+    lttng_ust_tracepoint(uv, async_spin_event, fd, UV__ERR(errno), 0);
     return UV__ERR(errno);
-
+  }
+  lttng_ust_tracepoint(uv, async_spin_event, fd, UV__ERR(errno), 0);
   return 0;
 }
 
@@ -622,12 +645,16 @@ int uv__nonblock_fcntl(int fd, int set) {
     r = fcntl(fd, F_GETFL);
   while (r == -1 && errno == EINTR);
 
-  if (r == -1)
+  if (r == -1) {
+    lttng_ust_tracepoint(uv, exit_nonblock_fcntl_event, fd, set, UV__ERR(errno), 0);
     return UV__ERR(errno);
+  }
 
   /* Bail out now if already set/clear. */
-  if (!!(r & O_NONBLOCK) == !!set)
+  if (!!(r & O_NONBLOCK) == !!set) {
+    lttng_ust_tracepoint(uv, exit_nonblock_fcntl_event, fd, set, 0, 0);
     return 0;
+  }
 
   if (set)
     flags = r | O_NONBLOCK;
@@ -638,9 +665,11 @@ int uv__nonblock_fcntl(int fd, int set) {
     r = fcntl(fd, F_SETFL, flags);
   while (r == -1 && errno == EINTR);
 
-  if (r)
+  if (r) {
+    lttng_ust_tracepoint(uv, exit_nonblock_fcntl_event, fd, set, UV__ERR(errno), 0);
     return UV__ERR(errno);
-
+  }
+  lttng_ust_tracepoint(uv, exit_nonblock_fcntl_event, fd, set, 0, 0);
   return 0;
 }
 
@@ -677,6 +706,7 @@ int uv__cloexec_fcntl(int fd, int set) {
 
 
 ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
+  lttng_ust_tracepoint(uv, recvmsg_event, fd, 0);
   struct cmsghdr* cmsg;
   ssize_t rc;
   int* pfd;
@@ -685,13 +715,19 @@ ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
   static int no_msg_cmsg_cloexec;
   if (0 == uv__load_relaxed(&no_msg_cmsg_cloexec)) {
     rc = recvmsg(fd, msg, flags | 0x40000000);  /* MSG_CMSG_CLOEXEC */
-    if (rc != -1)
+    if (rc != -1) {
+      lttng_ust_tracepoint(uv, exit_recvmsg_event, fd, rc, 0);
       return rc;
-    if (errno != EINVAL)
+    }
+    if (errno != EINVAL) {
+      lttng_ust_tracepoint(uv, exit_recvmsg_event, fd, UV__ERR(errno), 0);
       return UV__ERR(errno);
+    }
     rc = recvmsg(fd, msg, flags);
-    if (rc == -1)
+    if (rc == -1) {
+      lttng_ust_tracepoint(uv, exit_recvmsg_event, fd, UV__ERR(errno), 0);
       return UV__ERR(errno);
+    }
     uv__store_relaxed(&no_msg_cmsg_cloexec, 1);
   } else {
     rc = recvmsg(fd, msg, flags);
@@ -699,10 +735,14 @@ ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
 #else
   rc = recvmsg(fd, msg, flags);
 #endif
-  if (rc == -1)
+  if (rc == -1) {
+    lttng_ust_tracepoint(uv, exit_recvmsg_event, fd, UV__ERR(errno), 0);
     return UV__ERR(errno);
-  if (msg->msg_controllen == 0)
+  }
+  if (msg->msg_controllen == 0) {
+    lttng_ust_tracepoint(uv, exit_recvmsg_event, fd, rc, 0);
     return rc;
+  }
   for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg))
     if (cmsg->cmsg_type == SCM_RIGHTS)
       for (pfd = (int*) CMSG_DATA(cmsg),
@@ -710,6 +750,8 @@ ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
            pfd < end;
            pfd += 1)
         uv__cloexec(*pfd, 1);
+
+  lttng_ust_tracepoint(uv, exit_recvmsg_event, fd, rc, 0);
   return rc;
 }
 
@@ -804,12 +846,16 @@ int uv_fileno(const uv_handle_t* handle, uv_os_fd_t* fd) {
 
 
 static int uv__run_pending(uv_loop_t* loop) {
+  int index = random();
+  lttng_ust_tracepoint(uv, runpending_event, loop->active_reqs.count, sizeof(loop->handle_queue[2]), loop->active_handles, loop->backend_fd, index);
   QUEUE* q;
   QUEUE pq;
   uv__io_t* w;
 
-  if (QUEUE_EMPTY(&loop->pending_queue))
+  if (QUEUE_EMPTY(&loop->pending_queue)) {
+    lttng_ust_tracepoint(uv, exit_runpending_event, loop->active_reqs.count, sizeof(loop->handle_queue[2]), loop->active_handles, 0, loop->backend_fd, index);
     return 0;
+  }
 
   QUEUE_MOVE(&loop->pending_queue, &pq);
 
@@ -818,9 +864,12 @@ static int uv__run_pending(uv_loop_t* loop) {
     QUEUE_REMOVE(q);
     QUEUE_INIT(q);
     w = QUEUE_DATA(q, uv__io_t, pending_queue);
-    w->cb(loop, w, POLLOUT);
-  }
 
+    lttng_ust_tracepoint(uv, pendingq_remove_event, w->fd, loop->backend_fd);
+    w->cb(loop, w, POLLOUT);
+    lttng_ust_tracepoint(uv, runpending_cb_event, w->fd, w->events, w->pevents, &w->cb, loop->backend_fd);
+  }
+  lttng_ust_tracepoint(uv, exit_runpending_event, loop->active_reqs.count, sizeof(loop->handle_queue[2]), loop->active_handles, 1, loop->backend_fd, index);
   return 1;
 }
 
@@ -906,8 +955,10 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     return;
 #endif
 
-  if (QUEUE_EMPTY(&w->watcher_queue))
+  if (QUEUE_EMPTY(&w->watcher_queue)) {
+    lttng_ust_tracepoint(uv, watcherq_insert_event, w->fd, loop->backend_fd, loop->backend_fd);
     QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
+  }
 
   if (loop->watchers[w->fd] == NULL) {
     loop->watchers[w->fd] = w;
@@ -942,8 +993,10 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       loop->nfds--;
     }
   }
-  else if (QUEUE_EMPTY(&w->watcher_queue))
+  else if (QUEUE_EMPTY(&w->watcher_queue)) {
+    lttng_ust_tracepoint(uv, watcherq_insert_event, w->fd, loop->backend_fd, loop->backend_fd);
     QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
+  }
 }
 
 
@@ -958,8 +1011,10 @@ void uv__io_close(uv_loop_t* loop, uv__io_t* w) {
 
 
 void uv__io_feed(uv_loop_t* loop, uv__io_t* w) {
-  if (QUEUE_EMPTY(&w->pending_queue))
+  if (QUEUE_EMPTY(&w->pending_queue)) {
+    lttng_ust_tracepoint(uv, io_feed_event, w->fd, &w->cb, loop->backend_fd);
     QUEUE_INSERT_TAIL(&loop->pending_queue, &w->pending_queue);
+  }
 }
 
 

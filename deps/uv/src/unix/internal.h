@@ -38,6 +38,7 @@
 #endif
 
 #if defined(__linux__)
+#include "uv/lttng-tp-provider.h"
 # include "linux-syscalls.h"
 #endif /* __linux__ */
 
@@ -310,7 +311,9 @@ void uv__fsevents_loop_delete(uv_loop_t* loop);
 UV_UNUSED(static void uv__update_time(uv_loop_t* loop)) {
   /* Use a fast time source if available.  We only need millisecond precision.
    */
+  lttng_ust_tracepoint(uv, update_time_event, 0, loop->backend_fd);
   loop->time = uv__hrtime(UV_CLOCK_FAST) / 1000000;
+  lttng_ust_tracepoint(uv, exit_update_time_event, 0, loop->backend_fd);
 }
 
 UV_UNUSED(static char* uv__basename_r(const char* path)) {

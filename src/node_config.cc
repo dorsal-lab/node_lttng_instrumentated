@@ -82,6 +82,10 @@ static void Initialize(Local<Object> target,
 #if defined HAVE_DTRACE || defined HAVE_ETW
   READONLY_TRUE_PROPERTY(target, "hasDtrace");
 #endif
+
+#if defined HAVE_LTTNG
+  READONLY_TRUE_PROPERTY(target, "hasLTTng");
+#endif
 }  // InitConfig
 
 }  // namespace node

@@ -23,6 +23,7 @@
 #include "uv/tree.h"
 #include "internal.h"
 #include "heap-inl.h"
+#include "uv/lttng-tp-provider.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -153,6 +154,7 @@ int uv_loop_fork(uv_loop_t* loop) {
       continue;
 
     if (w->pevents != 0 && QUEUE_EMPTY(&w->watcher_queue)) {
+      lttng_ust_tracepoint(uv, watcherq_insert_event, w->fd, loop->backend_fd, loop->backend_fd);
       w->events = 0; /* Force re-registration in uv__io_poll. */
       QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
     }

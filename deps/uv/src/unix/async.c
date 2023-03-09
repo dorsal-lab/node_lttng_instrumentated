@@ -36,6 +36,7 @@
 
 #ifdef __linux__
 #include <sys/eventfd.h>
+#include "uv/lttng-tp-provider.h"
 #endif
 
 static void uv__async_send(uv_loop_t* loop);
@@ -82,6 +83,7 @@ int uv_async_send(uv_async_t* handle) {
 
 /* Only call this from the event loop thread. */
 static int uv__async_spin(uv_async_t* handle) {
+  lttng_ust_tracepoint(uv, async_spin_event, handle->u.fd, handle->pending, handle->loop->backend_fd);
   int i;
   int rc;
 
@@ -96,8 +98,10 @@ static int uv__async_spin(uv_async_t* handle) {
        */
       rc = cmpxchgi(&handle->pending, 2, 0);
 
-      if (rc != 1)
+      if (rc != 1) {
+        lttng_ust_tracepoint(uv, exit_async_spin_event, handle->u.fd, handle->pending, rc, handle->loop->backend_fd);
         return rc;
+      }
 
       /* Other thread is busy with this handle, spin until it's done. */
       cpu_relax();
@@ -108,6 +112,7 @@ static int uv__async_spin(uv_async_t* handle) {
      * as us, we'll just burn CPU cycles until the end of our time slice.
      */
     sched_yield();
+    lttng_ust_tracepoint(uv, exit_async_spin_event, handle->u.fd, handle->pending, rc, handle->loop->backend_fd);
   }
 }
 
@@ -120,6 +125,7 @@ void uv__async_close(uv_async_t* handle) {
 
 
 static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
+  lttng_ust_tracepoint(uv, asyncio_event, w->fd, events, loop->backend_fd);
   char buf[1024];
   ssize_t r;
   QUEUE queue;
@@ -160,7 +166,9 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     if (h->async_cb == NULL)
       continue;
 
+    lttng_ust_tracepoint(uv, run_async_cb_event, w->fd, events, &h->async_cb, &h, loop->backend_fd);
     h->async_cb(h);
+    lttng_ust_tracepoint(uv, exit_asyncio_event, w->fd, events, &h->async_cb, loop->backend_fd);
   }
 }
 
@@ -182,19 +190,25 @@ static void uv__async_send(uv_loop_t* loop) {
     len = sizeof(val);
     fd = loop->async_io_watcher.fd;  /* eventfd */
   }
+  lttng_ust_tracepoint(uv, async_send_event, fd, &buf, loop->backend_fd);
 #endif
 
   do
     r = write(fd, buf, len);
   while (r == -1 && errno == EINTR);
 
-  if (r == len)
+  if (r == len) {
+    lttng_ust_tracepoint(uv, exit_async_send_event, fd, &buf, r, loop->backend_fd);
     return;
+  }
 
-  if (r == -1)
-    if (errno == EAGAIN || errno == EWOULDBLOCK)
+  if (r == -1) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      lttng_ust_tracepoint(uv, exit_async_send_event, fd, &buf, r, loop->backend_fd);
       return;
-
+    }
+  }
+  lttng_ust_tracepoint(uv, exit_async_send_event, fd, &buf, r, loop->backend_fd);
   abort();
 }
 
@@ -208,8 +222,11 @@ static int uv__async_start(uv_loop_t* loop) {
 
 #ifdef __linux__
   err = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
-  if (err < 0)
+  lttng_ust_tracepoint(uv, async_start_event, err, loop->async_io_watcher.fd, loop->backend_fd);
+  if (err < 0) {
+    lttng_ust_tracepoint(uv, exit_async_start_event, err, loop->async_io_watcher.fd, loop->backend_fd);
     return UV__ERR(errno);
+  }
 
   pipefd[0] = err;
   pipefd[1] = -1;
@@ -222,7 +239,7 @@ static int uv__async_start(uv_loop_t* loop) {
   uv__io_init(&loop->async_io_watcher, uv__async_io, pipefd[0]);
   uv__io_start(loop, &loop->async_io_watcher, POLLIN);
   loop->async_wfd = pipefd[1];
-
+  lttng_ust_tracepoint(uv, async_start_event, err, loop->async_io_watcher.fd, loop->backend_fd);
   return 0;
 }
 
@@ -242,12 +259,15 @@ void uv__async_stop(uv_loop_t* loop) {
     return;
 
   if (loop->async_wfd != -1) {
-    if (loop->async_wfd != loop->async_io_watcher.fd)
+    if (loop->async_wfd != loop->async_io_watcher.fd) {
+      lttng_ust_tracepoint(uv, close_asyncfd_event, loop->async_wfd, loop->backend_fd);
       uv__close(loop->async_wfd);
+    }
     loop->async_wfd = -1;
   }
 
   uv__io_stop(loop, &loop->async_io_watcher, POLLIN);
   uv__close(loop->async_io_watcher.fd);
+  lttng_ust_tracepoint(uv, close_asyncfd_event, loop->async_io_watcher.fd, loop->backend_fd);
   loop->async_io_watcher.fd = -1;
 }

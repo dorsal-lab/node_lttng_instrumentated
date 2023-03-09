@@ -57,6 +57,7 @@ const expectedModules = new Set([
   'NativeModule internal/console/global',
   'NativeModule internal/constants',
   'NativeModule internal/dtrace',
+  'NativeModule internal/lttng',
   'NativeModule internal/encoding',
   'NativeModule internal/errors',
   'NativeModule internal/event_target',
@@ -209,6 +210,9 @@ if (process.env.NODE_V8_COVERAGE) {
 const { internalBinding } = require('internal/test/binding');
 if (internalBinding('config').hasDtrace) {
   expectedModules.add('Internal Binding dtrace');
+}
+if (internalBinding('config').hasLTTng) {
+  expectedModules.add('Internal Binding lttng')
 }
 
 const difference = (setA, setB) => {

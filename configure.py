@@ -97,6 +97,12 @@ parser.add_argument('--debug-node',
     default=None,
     help='build the Node.js part of the binary with debugging symbols')
 
+parser.add_argument('--with-lttng',
+    action='store_true',
+    dest='with_lttng',
+    default=None,
+    help='build with Lttng (Only available to Linux)')
+
 parser.add_argument('--dest-cpu',
     action='store',
     dest='dest_cpu',
@@ -1341,6 +1347,13 @@ def configure_node(o):
          now a runtime option of Node.js. Run `node --use-largepages` or add
          `--use-largepages` to the `NODE_OPTIONS` environment variable once
          Node.js is built to enable mapping to large pages.''')
+
+  if flavor == 'linux':
+    o['variables']['node_use_lttng'] = b(options.with_lttng)
+  elif options.with_lttng:
+    raise Exception('lttng is only supported on Linux.')
+  else:
+    o['variables']['node_use_lttng'] = 'false'
 
   if options.no_ifaddrs:
     o['defines'] += ['SUNOS_NO_IFADDRS']

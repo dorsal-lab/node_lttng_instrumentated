@@ -247,9 +247,10 @@
             'src/unix/procfs-exepath.c',
             'src/unix/random-getrandom.c',
             'src/unix/random-sysctl-linux.c',
+            'src/unix/lttng-tp-provider.c',
           ],
           'link_settings': {
-            'libraries': [ '-ldl', '-lrt' ],
+            'libraries': [ '-ldl', '-lrt', '-llttng-ust' ],
           },
         }],
         [ 'OS=="android"', {

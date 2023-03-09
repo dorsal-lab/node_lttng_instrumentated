@@ -32,6 +32,7 @@ struct uv__work {
   void (*done)(struct uv__work *w, int status);
   struct uv_loop_s* loop;
   void* wq[2];
+  int request_id;
 };
 
 #endif /* UV_THREADPOOL_H_ */
